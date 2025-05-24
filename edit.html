@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Edit Gallery Photos</title>
+  <style>
+    body {
+      background: #121212;
+      color: white;
+      font-family: Arial, sans-serif;
+      padding: 2rem;
+      max-width: 700px;
+      margin: auto;
+    }
+    h1 {
+      text-align: center;
+      margin-bottom: 1rem;
+      font-weight: 700;
+    }
+    #fileInput {
+      display: block;
+      margin-bottom: 1rem;
+      width: 100%;
+      padding: 0.5rem;
+      background: #222;
+      color: #eee;
+      border: none;
+      border-radius: 5px;
+      font-size: 1rem;
+    }
+    #uploadBtn {
+      width: 100%;
+      padding: 0.8rem;
+      background: #00ccff;
+      border: none;
+      border-radius: 6px;
+      font-weight: 700;
+      color: #121212;
+      cursor: pointer;
+      transition: background 0.3s ease;
+      margin-bottom: 2rem;
+    }
+    #uploadBtn:hover {
+      background: #0099cc;
+    }
+    #photoList {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 1rem;
+      justify-content: center;
+    }
+    #photoList img {
+      width: 150px;
+      height: 100px;
+      object-fit: cover;
+      cursor: pointer;
+      border: 2px solid transparent;
+      border-radius: 5px;
+      transition: border-color 0.2s ease;
+    }
+    #photoList img:hover {
+      border-color: #00ccff;
+    }
+    #photoList img.selected {
+      border-color: #00ccff;
+    }
+    .progress-container {
+      width: 150px;
+      background: #333;
+      border-radius: 5px;
+      overflow: hidden;
+      margin-bottom: 0.5rem;
+      height: 8px;
+    }
+    .progress-bar {
+      height: 8px;
+      background: #00ccff;
+      width: 0%;
+      transition: width 0.3s ease;
+    }
+    .upload-item {
+      width: 150px;
+      margin-bottom: 1rem;
+      text-align: center;
+      color: #bbb;
+      font-size: 0.8rem;
+      word-break: break-word;
+    }
+  </style>
+</head>
+<body>
+  <h1>Edit Gallery Photos</h1>
+
+  <input type="file" id="fileInput" multiple accept="image/*" />
+  <button id="uploadBtn">Upload to Cloudinary</button>
+
+  <h2>Current Photos (click to remove)</h2>
+  <div id="photoList"></div>
+
+  <script>
+    const CLOUD_NAME = 'dacemk1yq';
+    const UPLOAD_PRESET = 'unsigned_preset';
+    const MAX_FILE_SIZE = 10485760; // 10 MB
+
+    const fileInput = document.getElementById('fileInput');
+    const uploadBtn = document.getElementById('uploadBtn');
+    const photoList = document.getElementById('photoList');
+
+    // Load saved photos from localStorage
+    let photos = JSON.parse(localStorage.getItem('galleryPhotos') || '[]');
+    renderPhotos();
+
+    uploadBtn.onclick = () => {
+      const files = fileInput.files;
+      if (!files.length) {
+        alert('Please select one or more photos to upload.');
+        return;
+      }
+
+      for (const file of files) {
+        if (file.size > MAX_FILE_SIZE) {
+          alert(`File "${file.name}" is too large. Max size is 10MB.`);
+          return;
+        }
+      }
+
+      // Upload all files sequentially
+      uploadMultipleFiles([...files]);
+    };
+
+    async function uploadMultipleFiles(files) {
+      for (const file of files) {
+        await uploadPhoto(file);
+      }
+      alert('All uploads complete!');
+      fileInput.value = ''; // reset input
+    }
+
+    function uploadPhoto(file) {
+      return new Promise((resolve, reject) => {
+        const url = `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/upload`;
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('upload_preset', UPLOAD_PRESET);
+
+        // Create upload item UI
+        const uploadItem = document.createElement('div');
+        uploadItem.className = 'upload-item';
+        uploadItem.innerText = `Uploading: ${file.name}`;
+
+        const progressContainer = document.createElement('div');
+        progressContainer.className = 'progress-container';
+
+        const progressBar = document.createElement('div');
+        progressBar.className = 'progress-bar';
+        progressContainer.appendChild(progressBar);
+
+        uploadItem.appendChild(progressContainer);
+        photoList.appendChild(uploadItem);
+
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', url);
+
+        xhr.upload.addEventListener('progress', (e) => {
+          if (e.lengthComputable) {
+            const percent = (e.loaded / e.total) * 100;
+            progressBar.style.width = percent + '%';
+          }
+        });
+
+        xhr.onload = () => {
+          if (xhr.status === 200) {
+            const res = JSON.parse(xhr.responseText);
+            if (res.secure_url) {
+              photos.push(res.secure_url);
+              localStorage.setItem('galleryPhotos', JSON.stringify(photos));
+              renderPhotos();
+              photoList.removeChild(uploadItem);
+              resolve();
+            } else {
+              alert('Upload failed for ' + file.name);
+              photoList.removeChild(uploadItem);
+              reject();
+            }
+          } else {
+            alert('Upload failed for ' + file.name);
+            photoList.removeChild(uploadItem);
+            reject();
+          }
+        };
+
+        xhr.onerror = () => {
+          alert('Upload error for ' + file.name);
+          photoList.removeChild(uploadItem);
+          reject();
+        };
+
+        xhr.send(formData);
+      });
+    }
+
+    function renderPhotos() {
+      photoList.innerHTML = '';
+      photos.forEach((url, idx) => {
+        const img = document.createElement('img');
+        img.src = url;
+        img.title = 'Click to remove photo';
+        img.addEventListener('click', () => {
+          if (confirm('Remove this photo from gallery?')) {
+            photos.splice(idx, 1);
+            localStorage.setItem('galleryPhotos', JSON.stringify(photos));
+            renderPhotos();
+          }
+        });
+        photoList.appendChild(img);
+      });
+    }
+  </script>
+</body>
+</html>
